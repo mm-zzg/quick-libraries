@@ -1,0 +1,58 @@
+name: Build Quick Libraries
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: libquickmath.so
+            rid: linux-x64
+          - os: windows-latest
+            artifact_name: quickmath.dll
+            rid: win-x64
+          - os: macos-latest
+            artifact_name: libquickmath.dylib
+            rid: osx-x64
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure CMake
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Locate built library (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p artifacts/${{ matrix.rid }}
+          find build -name "${{ matrix.artifact_name }}" -exec cp {} artifacts/${{ matrix.rid }}/ \;
+
+      - name: Locate built library (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts/${{ matrix.rid }}
+          Get-ChildItem -Recurse -Filter "${{ matrix.artifact_name }}" build | Copy-Item -Destination artifacts/${{ matrix.rid }}/
+        shell: pwsh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.rid }}
+          path: artifacts/${{ matrix.rid }}/
