@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -56,3 +56,35 @@ jobs:
         with:
           name: ${{ matrix.rid }}
           path: artifacts/${{ matrix.rid }}/
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts/
+
+      - name: Create release archives
+        run: |
+          cd release-artifacts
+          for dir in */; do
+            rid="${dir%/}"
+            zip -j "../${rid}.zip" "${dir}"*
+          done
+          cd ..
+
+      - name: Generate release tag
+        id: tag
+        run: echo "tag=v$(date -u +'%Y%m%d-%H%M%S')" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: "Quick Libraries ${{ steps.tag.outputs.tag }}"
+          body: "Automated release of Quick Libraries built from commit ${{ github.sha }}."
+          files: "*.zip"
